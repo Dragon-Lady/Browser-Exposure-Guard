@@ -1,0 +1,25 @@
+{
+  "name": "browser-exposure-guard",
+  "version": "0.1.0",
+  "description": "Read-only browser/client exposure scanner for unsafe local artifacts and advisory watch signals.",
+  "bin": {
+    "browser-exposure-guard": "bin/browser-exposure-guard.js"
+  },
+  "scripts": {
+    "test": "node --check bin/browser-exposure-guard.js && node --check src/scanner.js && node test/smoke.js"
+  },
+  "keywords": [
+    "browser",
+    "security",
+    "chromium",
+    "client-side",
+    "exposure",
+    "scanner"
+  ],
+  "author": "",
+  "license": "MIT",
+  "private": false,
+  "engines": {
+    "node": ">=18"
+  }
+}
