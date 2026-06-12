@@ -17,8 +17,10 @@ browser” guidance.
 - No package installs.
 - No cleanup, deletion, quarantine, or credential rotation.
 - No claim that a host or browser profile is clean.
+- No telemetry, maintainer alerting, or remote reporting.
 
-The scanner reads local text-like files and reports review signals.
+The scanner reads local text-like files and reports review signals to the
+person running the tool.
 
 ## What It Checks
 
@@ -31,6 +33,10 @@ The scanner reads local text-like files and reports review signals.
 - Experimental flag notes such as `chrome://flags`,
   `--enable-blink-features`, or
   `--enable-experimental-web-platform-features`.
+- Phishing attachment patterns in local `.html` and `.svg` artifacts,
+  including SVG content disguised as HTML, invisible SVG business-dashboard
+  camouflage, business-term encoded payload attributes, and dynamic JavaScript
+  execution chains.
 
 ## Run
 

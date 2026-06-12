@@ -22,6 +22,73 @@ const TEXT_EXTENSIONS = new Set([
 
 const BROWSER_ARTIFACT_EXTENSIONS = new Set([".html", ".htm", ".svg", ".mhtml", ".har"]);
 
+const BUSINESS_TERM_STEGO_TERMS = [
+  "quarterly",
+  "annual",
+  "monthly",
+  "revenue",
+  "profit",
+  "growth",
+  "market",
+  "sales",
+  "customer",
+  "analytics",
+  "metrics",
+  "forecast",
+  "performance",
+  "strategy",
+  "operations",
+  "budget",
+  "finance",
+  "report",
+  "dashboard",
+  "insight",
+  "data",
+  "trends",
+  "analysis",
+  "business",
+  "overview",
+  "summary",
+  "review",
+  "target",
+  "goal",
+  "objective",
+  "kpi",
+  "roi",
+  "segment",
+  "portfolio",
+  "investment",
+  "return",
+  "cost",
+  "expense",
+  "value",
+  "margin",
+  "earnings",
+  "income",
+  "assets",
+  "equity",
+  "debt",
+  "cash",
+  "flow",
+  "capital",
+  "shares",
+  "stock",
+  "dividend",
+  "yield",
+  "risk",
+  "beta",
+  "alpha",
+  "ratio",
+  "balance",
+  "sheet",
+  "statement",
+  "audit",
+  "tax",
+  "fiscal",
+  "quarter",
+  "year",
+];
+
 const CHROMIUM_ADVISORY_TERMS = [
   "CVE-2026-3921",
   "TextEncoding",
@@ -56,7 +123,7 @@ function scanTarget(targetPath) {
 
 function inspectFile(filePath, root, text, findings) {
   const relative = path.relative(root, filePath).replace(/\\/g, "/") || path.basename(filePath);
-  const extension = path.extname(filePath).toLowerCase();
+  const extension = browserArtifactExtension(filePath);
 
   if (BROWSER_ARTIFACT_EXTENSIONS.has(extension)) {
     scanBrowserArtifact(relative, text, findings);
@@ -93,6 +160,100 @@ function scanBrowserArtifact(relative, text, findings) {
       "Avoid enabling experimental flags on daily-driver browsers when reviewing untrusted repro artifacts."
     );
   }
+
+  scanPhishingAttachmentArtifact(relative, text, findings);
+}
+
+function scanPhishingAttachmentArtifact(relative, text, findings) {
+  const extension = browserArtifactExtension(relative);
+  const hasSvg = /<svg\b/i.test(text);
+  const hasScript = /<script\b|javascript:|new\s+Function\s*\(|eval\s*\(/i.test(text);
+  const htmlNamedSvg = (extension === ".html" || extension === ".htm") && hasSvg && !/<html\b/i.test(text.slice(0, 1000));
+  const hiddenRenderMarkers = countMatches(text, /\b(?:opacity\s*=\s*["']?0["']?|visibility\s*:\s*hidden|visibility\s*=\s*["']hidden["']|fill\s*=\s*["']transparent["']|fill\s*:\s*transparent)\b/gi);
+  const hasInvisibleSvgDashboard = hasSvg && hiddenRenderMarkers >= 3 && /\b(?:Business|Analytics|Dashboard|Performance|Revenue|Report)\b/i.test(text);
+  const hasBusinessTermPayload = hasBusinessTermStegoPayload(text);
+  const hasDynamicExecutionChain = /String\.fromCharCode\s*\(/i.test(text)
+    && /(?:new\s+Function\s*\(|eval\s*\(|window\.location|location\.href)/i.test(text)
+    && /(?:setTimeout\s*\(|charCodeAt\s*\(|\^\s*[^=]|%\s*256)/i.test(text);
+  const hasKratosCampaignHash = /fb2a4eddd2e063dc/i.test(text);
+
+  if (htmlNamedSvg && (hasScript || hasInvisibleSvgDashboard)) {
+    addFinding(
+      findings,
+      "high",
+      "phishing-svg-disguised-as-html",
+      relative,
+      "HTML-named browser artifact appears to contain SVG content, a common phishing attachment smuggling pattern.",
+      "html extension + svg content",
+      "Do not open this attachment in a normal browser profile. Review as text or in an isolated analysis environment."
+    );
+  }
+
+  if (hasSvg && hasScript && hasInvisibleSvgDashboard) {
+    addFinding(
+      findings,
+      "high",
+      "phishing-invisible-svg-script",
+      relative,
+      "SVG artifact combines embedded script with invisible business-dashboard rendering camouflage.",
+      "svg script + hidden visual elements",
+      "Treat this as an active browser-executed attachment until proven benign."
+    );
+  }
+
+  if (hasBusinessTermPayload && hasDynamicExecutionChain) {
+    addFinding(
+      findings,
+      "high",
+      "phishing-business-term-steganography",
+      relative,
+      "Browser artifact appears to combine business-term encoded payload data with dynamic JavaScript execution.",
+      "business-term payload + dynamic execution",
+      "Do not decode or execute the payload on a daily-driver host. Preserve the file and review in isolation."
+    );
+  }
+
+  if (hasKratosCampaignHash || (hasBusinessTermPayload && hasInvisibleSvgDashboard && hasDynamicExecutionChain)) {
+    addFinding(
+      findings,
+      "medium",
+      "kratos-phishing-campaign-watch",
+      relative,
+      "File matches Kratos-style SVG phishing attachment watch signals reported by Sublime Security.",
+      hasKratosCampaignHash ? "campaign hash marker" : "svg + business-term encoding + dynamic execution",
+      "Correlate with sender reputation, authentication results, and attachment metadata before user exposure."
+    );
+  }
+}
+
+function hasBusinessTermStegoPayload(text) {
+  const attributeMatches = text.match(/\bdata-[a-z0-9_-]+\s*=\s*["'][^"']{250,}["']/gi) || [];
+  const candidateText = attributeMatches.length > 0 ? attributeMatches.join("\n") : text;
+  const termMatches = BUSINESS_TERM_STEGO_TERMS.reduce((count, term) => {
+    const pattern = new RegExp(`\\b${escapeRegExp(term)}\\b`, "gi");
+    return count + countMatches(candidateText, pattern);
+  }, 0);
+  const concatenatedPairHits = countMatches(
+    candidateText,
+    /(?:earningsannual|riskannual|sharesannual|yieldannual|statementquarterly|capitalquarterly|budgetquarterly|reportannual|summaryquarterly|investmentannual)/gi
+  );
+
+  return termMatches >= 24 || concatenatedPairHits >= 3;
+}
+
+function countMatches(text, pattern) {
+  return Array.from(text.matchAll(pattern)).length;
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function browserArtifactExtension(filePath) {
+  const extension = path.extname(filePath).toLowerCase();
+  if (extension) return extension;
+  const base = path.basename(filePath).toLowerCase();
+  return BROWSER_ARTIFACT_EXTENSIONS.has(base) ? base : "";
 }
 
 function scanChromiumAdvisoryNotes(relative, text, findings) {
