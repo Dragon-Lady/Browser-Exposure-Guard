@@ -37,6 +37,10 @@ person running the tool.
   including SVG content disguised as HTML, invisible SVG business-dashboard
   camouflage, business-term encoded payload attributes, and dynamic JavaScript
   execution chains.
+- Installed Chrome/Chromium/Edge extension profile manifests matching known
+  high-risk AI side-panel extension IDs from the Rebora Spyder/MaXSS research:
+  SiderAI (`difoiogjjojoaoomphldepapgpbgkhkb`) and MaxAI
+  (`mhnlakgilnojmhinhkckjpncpbhabphi`).
 
 ## Run
 
@@ -54,6 +58,8 @@ node .\bin\browser-exposure-guard.js --json C:\path\to\scan
 
 High findings mean “do not open this file in a normal browser profile.” Review
 with a safe text viewer, disposable VM, or isolated analysis environment.
+For installed extension findings, high means “disable or remove until vendor
+remediation is independently verified.”
 
 Medium findings are advisory or posture reminders. They usually mean “check
 browser patch state” or “avoid enabling experimental browser flags around

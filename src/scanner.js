@@ -99,6 +99,25 @@ const CHROMIUM_ADVISORY_TERMS = [
   "issues.chromium.org/issues/485677960",
 ];
 
+const AI_EXTENSION_WATCHLIST = new Map([
+  [
+    "difoiogjjojoaoomphldepapgpbgkhkb",
+    {
+      name: "SiderAI / Sider: Chat with all AI",
+      issue: "Spyder UXSG exposure",
+      impact: "arbitrary website-driven clicking and typing through extension-controlled embedded pages",
+    },
+  ],
+  [
+    "mhnlakgilnojmhinhkckjpncpbhabphi",
+    {
+      name: "MaxAI / MaxAI.me",
+      issue: "MaXSS UXSS exposure",
+      impact: "arbitrary website access to extension-level browser permissions",
+    },
+  ],
+]);
+
 function scanTarget(targetPath) {
   const root = path.resolve(targetPath || ".");
   const findings = [];
@@ -130,6 +149,7 @@ function inspectFile(filePath, root, text, findings) {
   }
 
   scanChromiumAdvisoryNotes(relative, text, findings);
+  scanKnownAiExtensionManifest(relative, text, findings);
 }
 
 function scanBrowserArtifact(relative, text, findings) {
@@ -269,6 +289,42 @@ function scanChromiumAdvisoryNotes(relative, text, findings) {
     matched.slice(0, 4).join(", "),
     "Verify browser patch state and avoid running linked PoCs or repro artifacts outside isolation."
   );
+}
+
+function scanKnownAiExtensionManifest(relative, text, findings) {
+  if (path.basename(relative).toLowerCase() !== "manifest.json") return;
+
+  const normalized = relative.replace(/\\/g, "/").toLowerCase();
+  for (const [extensionId, metadata] of AI_EXTENSION_WATCHLIST.entries()) {
+    if (!normalized.split("/").includes(extensionId)) continue;
+
+    const version = manifestVersion(text) || versionFromExtensionPath(normalized, extensionId) || "unknown";
+    addFinding(
+      findings,
+      "high",
+      "known-vulnerable-ai-browser-extension",
+      relative,
+      `${metadata.name} is installed in the scanned browser profile and matches Rebora's ${metadata.issue} watchlist.`,
+      `extension id ${extensionId}; manifest version ${version}; risk: ${metadata.impact}`,
+      "Disable or remove the extension until vendor remediation is independently verified. Review recently visited sites and browser account activity if exposure is suspected."
+    );
+  }
+}
+
+function manifestVersion(text) {
+  try {
+    const manifest = JSON.parse(text);
+    return typeof manifest.version === "string" && manifest.version.trim() ? manifest.version.trim() : "";
+  } catch (_error) {
+    return "";
+  }
+}
+
+function versionFromExtensionPath(normalizedRelative, extensionId) {
+  const parts = normalizedRelative.split("/");
+  const idIndex = parts.indexOf(extensionId);
+  if (idIndex < 0 || idIndex + 1 >= parts.length) return "";
+  return parts[idIndex + 1] || "";
 }
 
 function walk(root, onFile) {

@@ -8,6 +8,15 @@
 - Sublime Security, Kratos phishing attack hidden in business term encoding and
   sophisticated obfuscation:
   https://sublime.security/blog/kratos-phishing-attack-hidden-in-business-term-encoding-and-sophisticated-obfuscation/
+- Rebora, MaXSS & Spyder: How two Chrome extensions allow websites to
+  compromise over 10 million browsers:
+  https://rebora.io/blog/spyder-and-maxss-chrome-extension-vulnerabilities-put-millions-at-risk
+- Rebora, MaXSS: Chrome Extension MaxAI Vulnerable to UXSS Puts 1,000,000
+  Users at Risk:
+  https://rebora.io/blog/maxss-vulnerability-in-chrome-extension-leads-to-uxss
+- Rebora, Spyder: Chrome Extension SiderAI Vulnerable to UXSG Puts 10,000,000
+  Users at Risk:
+  https://rebora.io/blog/spyder-vulnerability-in-chrome-extension-leads-to-uxsg
 
 Sources are retained for defensive patch posture and local artifact review.
 This project intentionally avoids exploit reproduction steps.

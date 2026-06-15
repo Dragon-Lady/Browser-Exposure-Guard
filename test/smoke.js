@@ -55,6 +55,38 @@ try {
     ].join("\n")
   );
 
+  const siderManifest = path.join(
+    root,
+    ".config",
+    "google-chrome",
+    "Default",
+    "Extensions",
+    "difoiogjjojoaoomphldepapgpbgkhkb",
+    "5.5.6",
+    "manifest.json"
+  );
+  fs.mkdirSync(path.dirname(siderManifest), { recursive: true });
+  fs.writeFileSync(
+    siderManifest,
+    JSON.stringify({ name: "Sider: Chat with all AI", version: "5.5.6" }, null, 2)
+  );
+
+  const maxAiManifest = path.join(
+    root,
+    ".config",
+    "microsoft-edge",
+    "Default",
+    "Extensions",
+    "mhnlakgilnojmhinhkckjpncpbhabphi",
+    "3.0.0",
+    "manifest.json"
+  );
+  fs.mkdirSync(path.dirname(maxAiManifest), { recursive: true });
+  fs.writeFileSync(
+    maxAiManifest,
+    JSON.stringify({ name: "MaxAI.me", version: "3.0.0" }, null, 2)
+  );
+
   const report = scanTarget(root);
   const ids = new Set(report.findings.map((finding) => finding.id));
   assert(ids.has("chromium-advisory-watch-note"));
@@ -64,7 +96,12 @@ try {
   assert(ids.has("phishing-invisible-svg-script"));
   assert(ids.has("phishing-business-term-steganography"));
   assert(ids.has("kratos-phishing-campaign-watch"));
-  assert.strictEqual(report.summary.high, 4);
+  assert(ids.has("known-vulnerable-ai-browser-extension"));
+  assert.strictEqual(
+    report.findings.filter((finding) => finding.id === "known-vulnerable-ai-browser-extension").length,
+    2
+  );
+  assert.strictEqual(report.summary.high, 6);
   console.log("smoke tests passed");
 } finally {
   fs.rmSync(root, { recursive: true, force: true });
