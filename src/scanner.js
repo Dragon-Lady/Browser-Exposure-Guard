@@ -118,6 +118,12 @@ const AI_EXTENSION_WATCHLIST = new Map([
   ],
 ]);
 
+const COPILOT_REPROMPT_HOSTS = [
+  "copilot.microsoft.com",
+  "m365.cloud.microsoft/chat",
+  "microsoft365.com/chat",
+];
+
 function scanTarget(targetPath) {
   const root = path.resolve(targetPath || ".");
   const findings = [];
@@ -132,7 +138,7 @@ function scanTarget(targetPath) {
 
   return {
     tool: "browser-exposure-guard",
-    version: "0.1.0",
+    version: "0.1.1",
     scannedAt: new Date().toISOString(),
     target: root,
     summary: summarize(filesScanned, findings),
@@ -150,6 +156,7 @@ function inspectFile(filePath, root, text, findings) {
 
   scanChromiumAdvisoryNotes(relative, text, findings);
   scanKnownAiExtensionManifest(relative, text, findings);
+  scanCopilotRepromptLinks(relative, text, findings);
 }
 
 function scanBrowserArtifact(relative, text, findings) {
@@ -309,6 +316,58 @@ function scanKnownAiExtensionManifest(relative, text, findings) {
       "Disable or remove the extension until vendor remediation is independently verified. Review recently visited sites and browser account activity if exposure is suspected."
     );
   }
+}
+
+function scanCopilotRepromptLinks(relative, text, findings) {
+  const candidateUrls = extractUrls(text);
+  for (const url of candidateUrls) {
+    const decoded = safeDecode(url);
+    const normalized = decoded.toLowerCase();
+    if (!COPILOT_REPROMPT_HOSTS.some((host) => normalized.includes(host))) continue;
+    if (!/[?&]q=|%3fq%3d|%26q%3d/i.test(url) && !/[?&]q=/i.test(decoded)) continue;
+
+    const queryText = copilotQueryText(decoded);
+    if (!queryText) continue;
+    const hasPrivateContextRequest = /\b(?:recent files?|looked at today|where is the user|user location|sharepoint|onedrive|calendar|email|mailbox)\b/i.test(queryText);
+    const hasExternalExfil = /\b(?:send to|fetch|post to|exfiltrate|upload to|attacker server)\b[\s\S]{0,120}https?:\/\//i.test(queryText)
+      || /\b(?:webhook|collect|callback|exfil)\b/i.test(queryText);
+
+    if (hasPrivateContextRequest && hasExternalExfil) {
+      addFinding(
+        findings,
+        "high",
+        "copilot-reprompt-qparam-exfil-link",
+        relative,
+        "Local browser/client artifact contains a Microsoft Copilot q-parameter link shaped like Reprompt-style data exfiltration.",
+        "Copilot URL + q parameter + private-context request + external exfiltration terms",
+        "Do not click the link. Preserve the artifact and review the source, sender, referrer, and any Microsoft 365/Copilot activity around exposure."
+      );
+      return;
+    }
+  }
+}
+
+function extractUrls(text) {
+  const urls = [];
+  const pattern = /https?:\/\/[^\s"'<>]+/gi;
+  for (const match of text.matchAll(pattern)) {
+    urls.push(match[0]);
+  }
+  return urls;
+}
+
+function safeDecode(value) {
+  try {
+    return decodeURIComponent(value);
+  } catch (_error) {
+    return value;
+  }
+}
+
+function copilotQueryText(url) {
+  const match = url.match(/[?&]q=([^#&]+)/i);
+  if (!match) return "";
+  return match[1].replace(/\+/g, " ");
 }
 
 function manifestVersion(text) {

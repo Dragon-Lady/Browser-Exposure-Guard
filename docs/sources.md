@@ -17,6 +17,11 @@
 - Rebora, Spyder: Chrome Extension SiderAI Vulnerable to UXSG Puts 10,000,000
   Users at Risk:
   https://rebora.io/blog/spyder-vulnerability-in-chrome-extension-leads-to-uxsg
+- BleepingComputer, Microsoft 365 Copilot Reprompt / one-click data-theft
+  coverage:
+  https://www.bleepingcomputer.com/news/security/new-attack-turned-microsoft-365-copilot-into-1-click-data-theft-tool/
+- Windows Central summary of Varonis Reprompt details:
+  https://www.windowscentral.com/artificial-intelligence/microsoft-copilot/copilot-ai-reprompt-exploit-detailed-2026
 
 Sources are retained for defensive patch posture and local artifact review.
 This project intentionally avoids exploit reproduction steps.

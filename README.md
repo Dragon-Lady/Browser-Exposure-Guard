@@ -41,6 +41,9 @@ person running the tool.
   high-risk AI side-panel extension IDs from the Rebora Spyder/MaXSS research:
   SiderAI (`difoiogjjojoaoomphldepapgpbgkhkb`) and MaxAI
   (`mhnlakgilnojmhinhkckjpncpbhabphi`).
+- Microsoft Copilot / AI-assistant URLs in local browser/client artifacts where
+  a `q=` query parameter combines private-context requests with external
+  exfiltration terms, matching Reprompt-style one-click data-theft behavior.
 
 ## Run
 
