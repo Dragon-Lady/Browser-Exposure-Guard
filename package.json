@@ -5,6 +5,13 @@
   "bin": {
     "browser-exposure-guard": "bin/browser-exposure-guard.js"
   },
+  "files": [
+    "bin/",
+    "src/",
+    "docs/",
+    "LICENSE",
+    "README.md"
+  ],
   "scripts": {
     "test": "node --check bin/browser-exposure-guard.js && node --check src/scanner.js && node test/smoke.js"
   },
