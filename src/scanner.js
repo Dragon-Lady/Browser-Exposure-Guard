@@ -137,6 +137,19 @@ const CLAUDE_FOR_CHROME_FIX_GUIDANCE = [
   "Download Claude only from official Anthropic channels, not ads or third-party artifacts.",
 ].join(" ");
 
+const CLAUDE_FOR_CHROME_DISABLED_GUIDANCE = [
+  "Official Claude for Chrome is still on disk but this profile shows it is turned off.",
+  "Leave it disabled until Anthropic ships an independently verified isTrusted-style fix.",
+  "Do not turn it back on for convenience.",
+  "Read the public writeups: Manifold Security https://www.manifold.security/blog/claude-for-chrome-extension-bypass ; Malwarebytes https://www.malwarebytes.com/blog/news/2026/07/claude-for-chrome-flaw-could-let-rogue-extensions-access-your-gmail ; LayerX ClaudeBleed (archived original) https://web.archive.org/web/20260508132614/https://layerxsecurity.com/blog/a-flaw-in-claudes-browser-extension-allows-any-extension-to-hijack-it/ ; CSA research note https://labs.cloudsecurityalliance.org/wp-content/uploads/2026/07/CSA_research_note_claude_chrome_extension_click_simulation_flaw_20260718-csa-styled.pdf",
+].join(" ");
+
+const CLAUDE_FOR_CHROME_UNKNOWN_ENABLEMENT_GUIDANCE = [
+  "Official Claude for Chrome files are still on disk. This scan could not confirm from Preferences that the extension is enabled.",
+  "Check chrome://extensions or edge://extensions and keep it off until Anthropic ships an independently verified isTrusted-style fix.",
+  "Read the public writeups: Manifold Security https://www.manifold.security/blog/claude-for-chrome-extension-bypass ; Malwarebytes https://www.malwarebytes.com/blog/news/2026/07/claude-for-chrome-flaw-could-let-rogue-extensions-access-your-gmail ; LayerX ClaudeBleed (archived original) https://web.archive.org/web/20260508132614/https://layerxsecurity.com/blog/a-flaw-in-claudes-browser-extension-allows-any-extension-to-hijack-it/ ; CSA research note https://labs.cloudsecurityalliance.org/wp-content/uploads/2026/07/CSA_research_note_claude_chrome_extension_click_simulation_flaw_20260718-csa-styled.pdf",
+].join(" ");
+
 const FAKE_CLAUDE_EXTENSION_GUIDANCE = [
   "You may be exposed.",
   "This is not Anthropic's official Claude in Chrome listing.",
@@ -215,18 +228,20 @@ const FAKE_CLAUDE_LURE_MARKERS = [
 function scanTarget(targetPath) {
   const root = path.resolve(targetPath || ".");
   const findings = [];
+  const claudeWatch = createClaudeWatch();
   let filesScanned = 0;
 
   walk(root, (filePath) => {
     filesScanned += 1;
     const text = readTextFile(filePath);
     if (text === null) return;
-    inspectFile(filePath, root, text, findings);
+    inspectFile(filePath, root, text, findings, claudeWatch);
   });
+  emitClaudeWatchFindings(findings, claudeWatch);
 
   return {
     tool: "browser-exposure-guard",
-    version: "0.1.2",
+    version: "0.1.3",
     scannedAt: new Date().toISOString(),
     target: root,
     summary: summarize(filesScanned, findings),
@@ -234,7 +249,7 @@ function scanTarget(targetPath) {
   };
 }
 
-function inspectFile(filePath, root, text, findings) {
+function inspectFile(filePath, root, text, findings, claudeWatch) {
   const relative = path.relative(root, filePath).replace(/\\/g, "/") || path.basename(filePath);
   const extension = browserArtifactExtension(filePath);
 
@@ -244,11 +259,19 @@ function inspectFile(filePath, root, text, findings) {
 
   scanChromiumAdvisoryNotes(relative, text, findings);
   scanKnownAiExtensionManifest(relative, text, findings);
-  scanOfficialClaudeForChrome(relative, text, findings);
-  scanClaudePrivilegedModeSettings(relative, text, findings);
+  scanOfficialClaudeForChrome(relative, text, claudeWatch);
+  scanClaudePrivilegedModeSettings(relative, text, claudeWatch);
   scanFakeClaudeImpersonationExtension(relative, text, findings);
   scanFakeClaudeLureArtifact(relative, text, findings);
   scanCopilotRepromptLinks(relative, text, findings);
+}
+
+function createClaudeWatch() {
+  return {
+    presence: [],
+    enablement: new Map(),
+    privileged: [],
+  };
 }
 
 function scanBrowserArtifact(relative, text, findings) {
@@ -410,19 +433,24 @@ function scanKnownAiExtensionManifest(relative, text, findings) {
   }
 }
 
-function scanOfficialClaudeForChrome(relative, text, findings) {
+function scanOfficialClaudeForChrome(relative, text, claudeWatch) {
   const basename = path.basename(relative).toLowerCase();
   const normalized = relative.replace(/\\/g, "/").toLowerCase();
   const isManifest = basename === "manifest.json";
   const isPrefs = isChromiumPreferencesFile(relative);
+  const profileKey = chromiumProfileKey(relative);
   const pathHasOfficialId = pathContainsExtensionId(normalized, OFFICIAL_CLAUDE_CHROME_EXTENSION_ID);
+
+  if (isPrefs) recordClaudeEnablementFromPrefs(claudeWatch, profileKey, text);
 
   let matched = "";
   let version = "unknown";
+  let extensionId = "";
 
   if (isManifest && pathHasOfficialId) {
     matched = `official extension id ${OFFICIAL_CLAUDE_CHROME_EXTENSION_ID}`;
     version = manifestVersion(text) || versionFromExtensionPath(normalized, OFFICIAL_CLAUDE_CHROME_EXTENSION_ID) || "unknown";
+    extensionId = OFFICIAL_CLAUDE_CHROME_EXTENSION_ID;
   } else if (isManifest) {
     const identity = officialClaudeManifestIdentity(text);
     if (identity) {
@@ -432,36 +460,190 @@ function scanOfficialClaudeForChrome(relative, text, findings) {
   } else if (isPrefs && text.includes(OFFICIAL_CLAUDE_CHROME_EXTENSION_ID)) {
     matched = `browser Preferences lists official extension id ${OFFICIAL_CLAUDE_CHROME_EXTENSION_ID}`;
     version = prefsListedExtensionVersion(text, OFFICIAL_CLAUDE_CHROME_EXTENSION_ID) || "unknown";
+    extensionId = OFFICIAL_CLAUDE_CHROME_EXTENSION_ID;
   }
 
   if (!matched) return;
 
-  addFinding(
-    findings,
-    "high",
-    "claude-for-chrome-unpatched-trust-boundary",
-    relative,
-    "Official Claude for Chrome / Claude in Chrome is present in the scanned local browser profile. Public research (LayerX ClaudeBleed, April–May 2026; Manifold Security, July 2026) reports that co-installed extensions able to run on claude.ai can still trigger Claude tasks because the click handler does not check event.isTrusted, including in v1.0.80.",
-    `${matched}; manifest version ${version}`,
-    CLAUDE_FOR_CHROME_FIX_GUIDANCE
-  );
+  claudeWatch.presence.push({ relative, matched, version, profileKey, extensionId });
 }
 
-function scanClaudePrivilegedModeSettings(relative, text, findings) {
+function scanClaudePrivilegedModeSettings(relative, text, claudeWatch) {
   if (!isClaudePrivilegedModeSettingsFile(relative)) return;
 
   const matched = CLAUDE_PRIVILEGED_MODE_PATTERNS.filter((entry) => entry.pattern.test(text)).map((entry) => entry.label);
   if (matched.length === 0) return;
 
-  addFinding(
-    findings,
-    "high",
-    "claude-for-chrome-act-without-asking",
+  claudeWatch.privileged.push({
     relative,
-    "Local Claude for Chrome settings look like Act without asking / skip-all-permission-checks. Manifold Security rates the forged-click exposure Critical (9.6) in this mode versus High (7.7) in default ask-before-acting mode.",
-    `privileged-mode markers: ${matched.slice(0, 3).join("; ")}`,
-    CLAUDE_FOR_CHROME_FIX_GUIDANCE
-  );
+    markers: matched,
+    profileKey: chromiumProfileKey(relative),
+    extensionId: OFFICIAL_CLAUDE_CHROME_EXTENSION_ID,
+  });
+}
+
+function emitClaudeWatchFindings(findings, claudeWatch) {
+  for (const item of claudeWatch.presence) {
+    const enablement = lookupClaudeEnablement(claudeWatch, item.profileKey, item.extensionId);
+    if (enablement === "enabled") {
+      addFinding(
+        findings,
+        "high",
+        "claude-for-chrome-unpatched-trust-boundary",
+        item.relative,
+        "Official Claude for Chrome / Claude in Chrome is present and enabled in the scanned local browser profile. Public research (LayerX ClaudeBleed, April–May 2026; Manifold Security, July 2026) reports that co-installed extensions able to run on claude.ai can still trigger Claude tasks because the click handler does not check event.isTrusted, including in v1.0.80.",
+        `${item.matched}; manifest version ${item.version}; Preferences state enabled`,
+        CLAUDE_FOR_CHROME_FIX_GUIDANCE
+      );
+      continue;
+    }
+    if (enablement === "disabled") {
+      addFinding(
+        findings,
+        "medium",
+        "claude-for-chrome-disabled-on-disk",
+        item.relative,
+        "Official Claude for Chrome / Claude in Chrome is still on disk but this profile shows it is turned off. Public LayerX / Manifold research is why it should stay off until Anthropic ships an independently verified isTrusted-style fix.",
+        `${item.matched}; manifest version ${item.version}; Preferences state disabled`,
+        CLAUDE_FOR_CHROME_DISABLED_GUIDANCE
+      );
+      continue;
+    }
+    addFinding(
+      findings,
+      "medium",
+      "claude-for-chrome-on-disk-enablement-unknown",
+      item.relative,
+      "Official Claude for Chrome / Claude in Chrome files are on disk, but this scan could not confirm from Preferences that the extension is enabled. High/exposed is reserved for an enabled install.",
+      `${item.matched}; manifest version ${item.version}; Preferences state not confirmed`,
+      CLAUDE_FOR_CHROME_UNKNOWN_ENABLEMENT_GUIDANCE
+    );
+  }
+
+  for (const item of claudeWatch.privileged) {
+    const enablement = lookupClaudeEnablement(claudeWatch, item.profileKey, item.extensionId);
+    const markers = `privileged-mode markers: ${item.markers.slice(0, 3).join("; ")}`;
+    if (enablement === "enabled") {
+      addFinding(
+        findings,
+        "high",
+        "claude-for-chrome-act-without-asking",
+        item.relative,
+        "Local Claude for Chrome settings look like Act without asking / skip-all-permission-checks, and the official extension is enabled in this profile. Manifold Security rates the forged-click exposure Critical (9.6) in this mode versus High (7.7) in default ask-before-acting mode.",
+        `${markers}; Preferences state enabled`,
+        CLAUDE_FOR_CHROME_FIX_GUIDANCE
+      );
+      continue;
+    }
+    if (enablement === "disabled") {
+      addFinding(
+        findings,
+        "medium",
+        "claude-for-chrome-act-without-asking",
+        item.relative,
+        "Act without asking / skip-all-permission-checks strings remain on disk, but this profile shows Claude for Chrome is turned off. Leave it disabled until Anthropic ships an independently verified isTrusted-style fix.",
+        `${markers}; Preferences state disabled`,
+        CLAUDE_FOR_CHROME_DISABLED_GUIDANCE
+      );
+      continue;
+    }
+    addFinding(
+      findings,
+      "medium",
+      "claude-for-chrome-act-without-asking",
+      item.relative,
+      "Act without asking / skip-all-permission-checks strings are on disk, but this scan could not confirm the official extension is enabled. High/exposed is reserved for an enabled install.",
+      `${markers}; Preferences state not confirmed`,
+      CLAUDE_FOR_CHROME_UNKNOWN_ENABLEMENT_GUIDANCE
+    );
+  }
+}
+
+function recordClaudeEnablementFromPrefs(claudeWatch, profileKey, text) {
+  const parsed = parsedManifest(text);
+  const settings = parsed && parsed.extensions && parsed.extensions.settings && typeof parsed.extensions.settings === "object"
+    ? parsed.extensions.settings
+    : null;
+
+  if (settings) {
+    if (settings[OFFICIAL_CLAUDE_CHROME_EXTENSION_ID]) {
+      recordClaudeEnablement(
+        claudeWatch,
+        profileKey,
+        OFFICIAL_CLAUDE_CHROME_EXTENSION_ID,
+        interpretChromiumExtensionState(settings[OFFICIAL_CLAUDE_CHROME_EXTENSION_ID])
+      );
+    }
+    for (const [extensionId, entry] of Object.entries(settings)) {
+      if (!entry || typeof entry !== "object") continue;
+      const name = String((entry.manifest && entry.manifest.name) || "").trim().toLowerCase();
+      if (name !== "claude" && name !== "claude in chrome") continue;
+      recordClaudeEnablement(claudeWatch, profileKey, extensionId, interpretChromiumExtensionState(entry));
+    }
+    return;
+  }
+
+  if (text.includes(OFFICIAL_CLAUDE_CHROME_EXTENSION_ID)) {
+    recordClaudeEnablement(
+      claudeWatch,
+      profileKey,
+      OFFICIAL_CLAUDE_CHROME_EXTENSION_ID,
+      interpretChromiumExtensionStateFromText(text, OFFICIAL_CLAUDE_CHROME_EXTENSION_ID)
+    );
+  }
+}
+
+function recordClaudeEnablement(claudeWatch, profileKey, extensionId, enablement) {
+  if (!profileKey || !extensionId || !enablement) return;
+  const key = `${profileKey}::${extensionId}`;
+  const existing = claudeWatch.enablement.get(key);
+  if (existing === "disabled" || enablement === "disabled") {
+    claudeWatch.enablement.set(key, "disabled");
+    return;
+  }
+  claudeWatch.enablement.set(key, enablement);
+}
+
+function lookupClaudeEnablement(claudeWatch, profileKey, extensionId) {
+  if (profileKey && extensionId) {
+    const exact = claudeWatch.enablement.get(`${profileKey}::${extensionId}`);
+    if (exact) return exact;
+  }
+  return "";
+}
+
+function interpretChromiumExtensionState(settings) {
+  if (!settings || typeof settings !== "object") return "";
+  if (settings.state === 1 || settings.state === "1" || settings.enabled === true) return "enabled";
+  if (settings.state === 0 || settings.state === "0" || settings.enabled === false) return "disabled";
+  const reasons = settings.disable_reasons;
+  if (reasons !== undefined && reasons !== null && reasons !== 0 && reasons !== "0" && reasons !== "") {
+    return "disabled";
+  }
+  return "";
+}
+
+function interpretChromiumExtensionStateFromText(text, extensionId) {
+  const block = text.match(new RegExp(`"${escapeRegExp(extensionId)}"\\s*:\\s*\\{([\\s\\S]{0,4000}?)\\n\\s*\\}`));
+  const haystack = block ? block[1] : text;
+  if (/"state"\s*:\s*"?1"?/.test(haystack) || /"enabled"\s*:\s*true/.test(haystack)) return "enabled";
+  if (/"state"\s*:\s*"?0"?/.test(haystack) || /"enabled"\s*:\s*false/.test(haystack)) return "disabled";
+  if (/"disable_reasons"\s*:\s*(?:[1-9]\d*|"[1-9]\d*")/.test(haystack)) return "disabled";
+  return "";
+}
+
+function chromiumProfileKey(relative) {
+  const parts = relative.replace(/\\/g, "/").split("/");
+  const markers = new Set(["extensions", "local extension settings", "sync extension settings"]);
+  for (let index = 0; index < parts.length; index += 1) {
+    if (markers.has(parts[index].toLowerCase()) && index > 0) {
+      return parts.slice(0, index).join("/").toLowerCase();
+    }
+  }
+  if (isChromiumPreferencesFile(relative) && parts.length > 1) {
+    return parts.slice(0, -1).join("/").toLowerCase();
+  }
+  return "";
 }
 
 function scanFakeClaudeImpersonationExtension(relative, text, findings) {

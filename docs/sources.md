@@ -113,6 +113,14 @@ text-only and does not open LevelDB or launch a browser, so it only fires
 when those strings are visible in readable profile files (including `.log`
 files under that path).
 
+Enabled vs disabled uses Chromium’s public Preferences schema
+(`extensions.settings.<id>.state`: `1` enabled, `0` disabled, plus
+`disable_reasons` / `enabled`). High/exposed is emitted only when that
+profile shows the official extension enabled. A disabled leftover install is
+Medium/advisory so operators who already turned it off are not told they are
+currently exposed. Act-without-asking strings follow the same enablement
+gate.
+
 ### Huntress FakeAgent (July 2026)
 
 - Huntress, “Inside FakeAgent: How a Claude Desktop Malvertising Campaign Hit

@@ -141,6 +141,22 @@ try {
     JSON.stringify({ name: "Claude", version: "0.1.0", author: "Example Notes Inc" }, null, 2)
   );
 
+  const chromePreferences = path.join(root, ".config", "google-chrome", "Default", "Preferences");
+  fs.mkdirSync(path.dirname(chromePreferences), { recursive: true });
+  fs.writeFileSync(
+    chromePreferences,
+    JSON.stringify({
+      extensions: {
+        settings: {
+          fcoeoabgfenejglbffodgkkbkcdhcgfn: {
+            state: 1,
+            manifest: { name: "Claude", version: "1.0.80" },
+          },
+        },
+      },
+    })
+  );
+
   const edgePreferences = path.join(root, ".config", "microsoft-edge", "Default", "Preferences");
   fs.mkdirSync(path.dirname(edgePreferences), { recursive: true });
   fs.writeFileSync(
@@ -149,6 +165,38 @@ try {
       extensions: {
         settings: {
           fcoeoabgfenejglbffodgkkbkcdhcgfn: {
+            state: 1,
+            manifest: { name: "Claude", version: "1.0.80" },
+          },
+        },
+      },
+    })
+  );
+
+  const disabledClaudeManifest = path.join(
+    root,
+    ".config",
+    "google-chrome",
+    "Profile 2",
+    "Extensions",
+    "fcoeoabgfenejglbffodgkkbkcdhcgfn",
+    "1.0.80",
+    "manifest.json"
+  );
+  fs.mkdirSync(path.dirname(disabledClaudeManifest), { recursive: true });
+  fs.writeFileSync(
+    disabledClaudeManifest,
+    JSON.stringify({ name: "Claude", version: "1.0.80", author: "Anthropic" }, null, 2)
+  );
+  const disabledPreferences = path.join(root, ".config", "google-chrome", "Profile 2", "Preferences");
+  fs.writeFileSync(
+    disabledPreferences,
+    JSON.stringify({
+      extensions: {
+        settings: {
+          fcoeoabgfenejglbffodgkkbkcdhcgfn: {
+            state: 0,
+            disable_reasons: 1,
             manifest: { name: "Claude", version: "1.0.80" },
           },
         },
@@ -239,17 +287,27 @@ try {
   assert(ids.has("copilot-reprompt-qparam-exfil-link"));
   assert(ids.has("known-vulnerable-ai-browser-extension"));
   assert(ids.has("claude-for-chrome-unpatched-trust-boundary"));
+  assert(ids.has("claude-for-chrome-disabled-on-disk"));
+  assert(ids.has("claude-for-chrome-on-disk-enablement-unknown"));
   assert(ids.has("claude-for-chrome-act-without-asking"));
   assert(ids.has("fake-claude-impersonation-extension"));
   assert(ids.has("fake-claude-install-lure-artifact"));
   assert.strictEqual(findingsById("known-vulnerable-ai-browser-extension").length, 2);
   assert.strictEqual(findingsById("claude-for-chrome-unpatched-trust-boundary").length, 3);
+  assert(findingsById("claude-for-chrome-unpatched-trust-boundary").every((finding) => finding.severity === "high"));
+  assert.strictEqual(findingsById("claude-for-chrome-disabled-on-disk").length, 2);
+  assert(findingsById("claude-for-chrome-disabled-on-disk").every((finding) => finding.severity === "medium"));
+  assert(findingsById("claude-for-chrome-disabled-on-disk").every((finding) => finding.path.includes("Profile 2")));
+  assert.strictEqual(findingsById("claude-for-chrome-on-disk-enablement-unknown").length, 1);
+  assert(findingsById("claude-for-chrome-on-disk-enablement-unknown")[0].path.includes("unpacked-official-claude"));
   assert.strictEqual(findingsById("claude-for-chrome-act-without-asking").length, 1);
+  assert.strictEqual(findingsById("claude-for-chrome-act-without-asking")[0].severity, "high");
   assert.strictEqual(findingsById("fake-claude-impersonation-extension").length, 2);
   assert.strictEqual(findingsById("fake-claude-install-lure-artifact").length, 1);
   assert(!report.findings.some((finding) => finding.path.endsWith("research-notes.md")));
   assert(!report.findings.some((finding) => finding.path.includes("unrelated-claude-notes")));
   assert(findingsById("claude-for-chrome-unpatched-trust-boundary").every((finding) => finding.guidance.includes("manifold.security")));
+  assert(findingsById("claude-for-chrome-disabled-on-disk").every((finding) => finding.guidance.includes("turned off") || finding.guidance.includes("Leave it disabled")));
   assert(findingsById("fake-claude-install-lure-artifact")[0].guidance.includes("huntress.com"));
   assert.strictEqual(report.summary.high, 14);
   console.log("smoke tests passed");
