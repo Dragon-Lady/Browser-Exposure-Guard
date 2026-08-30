@@ -95,8 +95,140 @@ try {
     JSON.stringify({ name: "MaxAI.me", version: "3.0.0" }, null, 2)
   );
 
+  const claudeManifest = path.join(
+    root,
+    ".config",
+    "google-chrome",
+    "Default",
+    "Extensions",
+    "fcoeoabgfenejglbffodgkkbkcdhcgfn",
+    "1.0.80",
+    "manifest.json"
+  );
+  fs.mkdirSync(path.dirname(claudeManifest), { recursive: true });
+  fs.writeFileSync(
+    claudeManifest,
+    JSON.stringify({ name: "Claude", version: "1.0.80", author: "Anthropic" }, null, 2)
+  );
+
+  const unpackedClaudeManifest = path.join(
+    root,
+    ".config",
+    "google-chrome",
+    "Default",
+    "Extensions",
+    "unpacked-official-claude",
+    "manifest.json"
+  );
+  fs.mkdirSync(path.dirname(unpackedClaudeManifest), { recursive: true });
+  fs.writeFileSync(
+    unpackedClaudeManifest,
+    JSON.stringify({ name: "Claude in Chrome", version: "1.0.80", author: "Anthropic" }, null, 2)
+  );
+
+  const unrelatedClaudeManifest = path.join(
+    root,
+    ".config",
+    "google-chrome",
+    "Default",
+    "Extensions",
+    "unrelated-claude-notes",
+    "manifest.json"
+  );
+  fs.mkdirSync(path.dirname(unrelatedClaudeManifest), { recursive: true });
+  fs.writeFileSync(
+    unrelatedClaudeManifest,
+    JSON.stringify({ name: "Claude", version: "0.1.0", author: "Example Notes Inc" }, null, 2)
+  );
+
+  const edgePreferences = path.join(root, ".config", "microsoft-edge", "Default", "Preferences");
+  fs.mkdirSync(path.dirname(edgePreferences), { recursive: true });
+  fs.writeFileSync(
+    edgePreferences,
+    JSON.stringify({
+      extensions: {
+        settings: {
+          fcoeoabgfenejglbffodgkkbkcdhcgfn: {
+            manifest: { name: "Claude", version: "1.0.80" },
+          },
+        },
+      },
+    })
+  );
+
+  const privilegedLog = path.join(
+    root,
+    ".config",
+    "google-chrome",
+    "Default",
+    "Local Extension Settings",
+    "fcoeoabgfenejglbffodgkkbkcdhcgfn",
+    "000003.log"
+  );
+  fs.mkdirSync(path.dirname(privilegedLog), { recursive: true });
+  fs.writeFileSync(
+    privilegedLog,
+    [
+      "lastPermissionModePreference",
+      "skip_all_permission_checks",
+      "Act without asking",
+    ].join("\n")
+  );
+
+  const fakeClaudeManifest = path.join(
+    root,
+    ".config",
+    "google-chrome",
+    "Default",
+    "Extensions",
+    "inhcgfpbfdjbjogdfjbclgolkmhnooop",
+    "1.6.1",
+    "manifest.json"
+  );
+  fs.mkdirSync(path.dirname(fakeClaudeManifest), { recursive: true });
+  fs.writeFileSync(
+    fakeClaudeManifest,
+    JSON.stringify({ name: "AI Sidebar with Deepseek, ChatGPT, Claude and more", version: "1.6.1" }, null, 2)
+  );
+
+  const fakeClaudeNameOnly = path.join(
+    root,
+    ".config",
+    "chromium",
+    "Default",
+    "Extensions",
+    "sideloaded-fake-sidebar",
+    "manifest.json"
+  );
+  fs.mkdirSync(path.dirname(fakeClaudeNameOnly), { recursive: true });
+  fs.writeFileSync(
+    fakeClaudeNameOnly,
+    JSON.stringify({ name: "AI Sidebar with DeepSeek, ChatGPT, Claude", version: "1.0.0" }, null, 2)
+  );
+
+  fs.writeFileSync(
+    path.join(root, "fake-claude-lure.html"),
+    [
+      "<!doctype html>",
+      "<p>Download page bookmark</p>",
+      "<a href=\"https://claude.ai/public/artifacts/ca456f1f-44c0-42af-b329-4f1c7534a877\">artifact</a>",
+      "<p>redirect host downloading-api.it.com</p>",
+    ].join("\n")
+  );
+
+  fs.writeFileSync(
+    path.join(root, "research-notes.md"),
+    [
+      "Public research notes only.",
+      "Official id fcoeoabgfenejglbffodgkkbkcdhcgfn",
+      "skipPermissions=true skip_all_permission_checks Act without asking",
+      "Huntress artifact ca456f1f-44c0-42af-b329-4f1c7534a877",
+    ].join("\n")
+  );
+
   const report = scanTarget(root);
   const ids = new Set(report.findings.map((finding) => finding.id));
+  const findingsById = (id) => report.findings.filter((finding) => finding.id === id);
   assert(ids.has("chromium-advisory-watch-note"));
   assert(ids.has("browser-poc-artifact"));
   assert(ids.has("browser-experimental-flag-note"));
@@ -106,11 +238,20 @@ try {
   assert(ids.has("kratos-phishing-campaign-watch"));
   assert(ids.has("copilot-reprompt-qparam-exfil-link"));
   assert(ids.has("known-vulnerable-ai-browser-extension"));
-  assert.strictEqual(
-    report.findings.filter((finding) => finding.id === "known-vulnerable-ai-browser-extension").length,
-    2
-  );
-  assert.strictEqual(report.summary.high, 7);
+  assert(ids.has("claude-for-chrome-unpatched-trust-boundary"));
+  assert(ids.has("claude-for-chrome-act-without-asking"));
+  assert(ids.has("fake-claude-impersonation-extension"));
+  assert(ids.has("fake-claude-install-lure-artifact"));
+  assert.strictEqual(findingsById("known-vulnerable-ai-browser-extension").length, 2);
+  assert.strictEqual(findingsById("claude-for-chrome-unpatched-trust-boundary").length, 3);
+  assert.strictEqual(findingsById("claude-for-chrome-act-without-asking").length, 1);
+  assert.strictEqual(findingsById("fake-claude-impersonation-extension").length, 2);
+  assert.strictEqual(findingsById("fake-claude-install-lure-artifact").length, 1);
+  assert(!report.findings.some((finding) => finding.path.endsWith("research-notes.md")));
+  assert(!report.findings.some((finding) => finding.path.includes("unrelated-claude-notes")));
+  assert(findingsById("claude-for-chrome-unpatched-trust-boundary").every((finding) => finding.guidance.includes("manifold.security")));
+  assert(findingsById("fake-claude-install-lure-artifact")[0].guidance.includes("huntress.com"));
+  assert.strictEqual(report.summary.high, 14);
   console.log("smoke tests passed");
 } finally {
   fs.rmSync(root, { recursive: true, force: true });
