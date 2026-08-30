@@ -44,6 +44,19 @@ person running the tool.
 - Microsoft Copilot / AI-assistant URLs in local browser/client artifacts where
   a `q=` query parameter combines private-context requests with external
   exfiltration terms, matching Reprompt-style one-click data-theft behavior.
+- Official Anthropic Claude for Chrome / Claude in Chrome in local
+  Chrome/Chromium/Edge profiles (published extension id
+  `fcoeoabgfenejglbffodgkkbkcdhcgfn`, or manifest name plus Anthropic
+  publisher), including local “Act without asking” /
+  `skip_all_permission_checks` settings when those strings appear in profile
+  Preferences or extension-settings files. High/exposed only when Preferences
+  show the extension enabled (`state: 1`). Installed-but-disabled leftovers
+  are Medium/advisory. This is a local alert for the public LayerX ClaudeBleed
+  / Manifold Security synthetic-click research, not original vulnerability
+  research.
+- Published fake-Claude Chrome Web Store impersonation extension ids/names and
+  local lure artifacts matching Huntress FakeAgent or Sophos fake-Claude
+  install indicators. No invented hashes or ids.
 
 ## Run
 
@@ -63,10 +76,18 @@ High findings mean “do not open this file in a normal browser profile.” Revi
 with a safe text viewer, disposable VM, or isolated analysis environment.
 For installed extension findings, high means “disable or remove until vendor
 remediation is independently verified.”
+For Claude for Chrome findings, high means you may be exposed: the official
+extension is present **and enabled**, Act without asking appears to be on
+while it is enabled, a published fake-Claude impersonation extension is
+installed, or a local file matches a published install lure. Follow the
+finding’s guidance links. This tool does not claim the host is clean.
 
 Medium findings are advisory or posture reminders. They usually mean “check
 browser patch state” or “avoid enabling experimental browser flags around
-untrusted repros.”
+untrusted repros.” A Medium Claude finding means the official extension is
+still on disk but turned off, or this scan could not confirm it is enabled.
+Leave it disabled until Anthropic ships an independently verified
+isTrusted-style fix. Same credited writeups as the High finding.
 
 ## Sources
 
