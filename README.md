@@ -44,6 +44,13 @@ person running the tool.
 - Microsoft Copilot / AI-assistant URLs in local browser/client artifacts where
   a `q=` query parameter combines private-context requests with external
   exfiltration terms, matching Reprompt-style one-click data-theft behavior.
+- Huntress-reported fake “Plus 5.6” Custom GPT IDs and Google Sites ClickFix
+  lures in saved HTML/MHTML/HAR artifacts. Exported Windows text, JSON, and XML
+  evidence is checked for the reported PowerShell staging and MSI/persistence
+  combinations. Exact SHA-256 matches on five reported malicious MSI/DLL files
+  are checked when those files appear in the target folder. The legitimate
+  signed Canon and Stardock host executables are not flagged. A saved URL is a
+  visit lead, not proof of execution.
 - Official Anthropic Claude for Chrome / Claude in Chrome in local
   Chrome/Chromium/Edge profiles (published extension id
   `fcoeoabgfenejglbffodgkkbkcdhcgfn`, or manifest name plus Anthropic
@@ -70,10 +77,21 @@ JSON output:
 node .\bin\browser-exposure-guard.js --json C:\path\to\scan
 ```
 
+For the Huntress campaign, scan a folder of **saved browser pages/HAR files or
+exported Windows process, task, and registry evidence**. The scanner does not
+read live browser history, Windows Event Logs, the registry, or scheduled tasks
+by itself. Name exported Windows evidence files with `windows`, `event`,
+`sysmon`, `process`, `powershell`, `task`, `registry`, `autoruns`, `triage`, or
+`export` so the campaign check can distinguish them from research notes. It
+does not execute a pasted command or inspect malware behavior; matching candidate
+files are only hashed.
+
 ## Interpreting Findings
 
-High findings mean “do not open this file in a normal browser profile.” Review
-with a safe text viewer, disposable VM, or isolated analysis environment.
+High browser-artifact findings mean “do not open this file in a normal browser
+profile.” Review with a safe text viewer, disposable VM, or isolated analysis
+environment. High Windows evidence or file-hash findings call for incident
+triage; they do not by themselves establish that the final RAT ran.
 For installed extension findings, high means “disable or remove until vendor
 remediation is independently verified.”
 For Claude for Chrome findings, high means you may be exposed: the official

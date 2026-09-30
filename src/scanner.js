@@ -2,6 +2,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { scanClickfixArtifact, scanClickfixBinary, isClickfixCandidateBinary } = require("./clickfix");
 
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
 const SKIP_DIRS = new Set([".git", "node_modules", "dist", "build", "coverage", ".next"]);
@@ -233,6 +234,11 @@ function scanTarget(targetPath) {
 
   walk(root, (filePath) => {
     filesScanned += 1;
+    if (isClickfixCandidateBinary(filePath)) {
+      const relative = path.relative(root, filePath).replace(/\\/g, "/") || path.basename(filePath);
+      scanClickfixBinary(filePath, relative, findings);
+      return;
+    }
     const text = readTextFile(filePath);
     if (text === null) return;
     inspectFile(filePath, root, text, findings, claudeWatch);
@@ -241,7 +247,7 @@ function scanTarget(targetPath) {
 
   return {
     tool: "browser-exposure-guard",
-    version: "0.1.3",
+    version: "0.1.4",
     scannedAt: new Date().toISOString(),
     target: root,
     summary: summarize(filesScanned, findings),
@@ -264,6 +270,7 @@ function inspectFile(filePath, root, text, findings, claudeWatch) {
   scanFakeClaudeImpersonationExtension(relative, text, findings);
   scanFakeClaudeLureArtifact(relative, text, findings);
   scanCopilotRepromptLinks(relative, text, findings);
+  scanClickfixArtifact(relative, text, findings);
 }
 
 function createClaudeWatch() {
@@ -853,7 +860,7 @@ function walk(root, onFile) {
       const fullPath = path.join(current, entry.name);
       if (entry.isDirectory()) {
         if (!SKIP_DIRS.has(entry.name)) stack.push(fullPath);
-      } else if (entry.isFile() && shouldReadFile(fullPath)) {
+      } else if (entry.isFile() && (shouldReadFile(fullPath) || isClickfixCandidateBinary(fullPath))) {
         onFile(fullPath);
       }
     }

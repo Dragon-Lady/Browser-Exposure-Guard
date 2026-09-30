@@ -1,5 +1,12 @@
 # Sources
 
+- Huntress, “Attackers Abuse ChatGPT Custom GPTs to Deliver RAT via ClickFix”
+  (2026-09-30): https://www.huntress.com/blog/chatgpt-custom-gpts-clickfix-rat
+  Huntress investigated at least 40 incidents connected to the Google Sites
+  page and confirmed two infections through a Custom GPT. This scanner uses
+  exact published GPT IDs and correlated lure/Windows evidence; it does not
+  infer infection from a URL reference alone.
+
 - Chromium issue `484946544`: https://issues.chromium.org/issues/484946544
 - Chromium issue `485677960`: https://issues.chromium.org/issues/485677960
 - NVD CVE-2026-3921: https://nvd.nist.gov/vuln/detail/CVE-2026-3921
