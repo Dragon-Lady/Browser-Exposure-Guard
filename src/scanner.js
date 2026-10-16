@@ -482,7 +482,10 @@ function scanClaudePrivilegedModeSettings(relative, text, claudeWatch) {
   }
   const matched = settings
     ? claudePrivilegedSettingMarkers(settings)
-    : CLAUDE_PRIVILEGED_MODE_PATTERNS.filter((entry) => entry.pattern.test(text)).map((entry) => entry.label);
+    : [...new Set([
+      ...CLAUDE_PRIVILEGED_MODE_PATTERNS.filter((entry) => entry.pattern.test(text)).map((entry) => entry.label),
+      ...claudeFramedSettingMarkers(text),
+    ])];
   if (matched.length === 0) return;
 
   claudeWatch.privileged.push({
@@ -491,6 +494,25 @@ function scanClaudePrivilegedModeSettings(relative, text, claudeWatch) {
     profileKey: chromiumProfileKey(relative),
     extensionId: OFFICIAL_CLAUDE_CHROME_EXTENSION_ID,
   });
+}
+
+function claudeFramedSettingMarkers(text) {
+  // LevelDB WriteBatch Put: tag 1, length-prefixed key, length-prefixed value.
+  // Known keys and JSON values are ASCII and shorter than 128 bytes, so each
+  // length is a one-byte varint preserved by UTF-8 decoding. Match complete
+  // pairs, never a bare mode label or an arbitrary gap between key and value.
+  const pairs = [
+    ...["skipPermissions", "skip_all_permission_checks"].flatMap((key) =>
+      [true, "true"].map((value) => [key, value])),
+    ...["lastPermissionModePreference", "permissionMode", "permission_mode", "CLAUDE_CHROME_PERMISSION_MODE"]
+      .map((key) => [key, "skip_all_permission_checks"]),
+  ];
+  return pairs.filter(([key, value]) => {
+    const serialized = JSON.stringify(value);
+    const framed = String.fromCharCode(1, key.length) + key
+      + String.fromCharCode(serialized.length) + serialized;
+    return text.includes(framed);
+  }).map(([key]) => `${key} enabled storage record`);
 }
 
 function claudePrivilegedSettingMarkers(settings) {

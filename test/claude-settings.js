@@ -14,7 +14,7 @@ function scanFile(relative, content) {
   try {
     const target = path.join(root, relative);
     fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.writeFileSync(target, typeof content === "string" ? content : JSON.stringify(content));
+    fs.writeFileSync(target, typeof content === "string" || Buffer.isBuffer(content) ? content : JSON.stringify(content));
     return scanTarget(root).findings;
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
@@ -79,4 +79,38 @@ for (const enabled of [
   assert(scanFile(storagePath, enabled).some((f) => f.id === privilegedId));
 }
 
-console.log("30 publisher and permission-setting regression cases passed");
+function leveldbPut(key, value) {
+  const keyBytes = Buffer.from(key);
+  const valueBytes = Buffer.from(JSON.stringify(value));
+  const batchHeader = Buffer.alloc(12);
+  batchHeader.writeUInt32LE(1, 8);
+  const batch = Buffer.concat([
+    batchHeader, Buffer.from([1, keyBytes.length]), keyBytes,
+    Buffer.from([valueBytes.length]), valueBytes,
+  ]);
+  const logHeader = Buffer.alloc(7);
+  logHeader.writeUInt16LE(batch.length, 4);
+  logHeader[6] = 1;
+  // This scanner inspects markers, not database integrity or CRC values.
+  return Buffer.concat([logHeader, batch]);
+}
+
+for (const [key, value] of [
+  ["skipPermissions", true],
+  ["skipPermissions", "true"],
+  ["skip_all_permission_checks", true],
+  ["lastPermissionModePreference", "skip_all_permission_checks"],
+  ["permissionMode", "skip_all_permission_checks"],
+]) {
+  assert(scanFile(storagePath, leveldbPut(key, value)).some((f) => f.id === privilegedId));
+}
+for (const [key, value] of [
+  ["skipPermissions", false],
+  ["skip_all_permission_checks", false],
+  ["unrelated", "skip_all_permission_checks"],
+  ["skipPermissions", "true-ish"],
+]) {
+  assert(!scanFile(storagePath, leveldbPut(key, value)).some((f) => f.id === privilegedId));
+}
+
+console.log("39 publisher and permission-setting regression cases passed");
