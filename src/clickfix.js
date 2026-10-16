@@ -31,11 +31,13 @@ function scanClickfixBinary(filePath, relative, findings) {
   const expected = MALICIOUS_FILE_HASHES.get(name);
   if (!expected) return;
   const actual = hashFile(filePath);
-  if (actual !== expected) return;
+  if (actual === null) return false;
+  if (actual !== expected) return true;
   add(findings, "high", "huntress-clickfix-malicious-file-hash", relative,
     "File SHA-256 matches a malicious installer or modified DLL reported by Huntress.",
     `${name} SHA-256 ${expected}`,
     `Preserve the file and surrounding process, installation, task, and Run-key evidence. Do not execute it. ${SOURCE}`);
+  return true;
 }
 
 function hashFile(filePath) {

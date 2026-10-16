@@ -1,5 +1,21 @@
 # Browser Exposure Guard
 
+## CLI Results and Report Safety
+
+`browser-exposure-guard [target] [--json] [--report NEW_FILE]` accepts a file or
+directory. `--help` prints usage without scanning. Unknown options, missing
+option values, and multiple targets are errors.
+
+Exit codes: 0 means no high findings in a completed scan, 1 means high findings,
+and 2 means usage/runtime error or incomplete coverage (takes precedence over 1).
+Missing/unsupported targets fail. Unreadable directories/files and size-limited
+candidates set `coverage.complete: false` with path/reason details. Completeness
+applies to selected file types and configured directory skips, not every file.
+
+`--report` exclusively creates a new private file (0600 on POSIX). Existing
+files and links are refused, even when they alias an input. A write failure
+returns 2 and may leave a partial new file; it is not a successful report.
+
 Read-only browser/client exposure scanner for unsafe local artifacts and
 browser advisory watch signals.
 
