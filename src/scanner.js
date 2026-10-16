@@ -226,19 +226,37 @@ function scanTarget(targetPath) {
   const root = path.resolve(targetPath || ".");
   const findings = [];
   const claudeWatch = createClaudeWatch();
+  const coverage = { complete: true, errors: [] };
+  const incomplete = (filePath, reason) => {
+    coverage.complete = false;
+    coverage.errors.push({ path: filePath, reason });
+  };
   let filesScanned = 0;
 
   walk(root, (filePath) => {
-    filesScanned += 1;
     if (isClickfixCandidateBinary(filePath)) {
       const relative = path.relative(root, filePath).replace(/\\/g, "/") || path.basename(filePath);
-      scanClickfixBinary(filePath, relative, findings);
+      if (scanClickfixBinary(filePath, relative, findings)) filesScanned += 1;
+      else incomplete(filePath, "binary-not-inspected");
+      return;
+    }
+    try {
+      if (fs.statSync(filePath).size > MAX_FILE_BYTES) {
+        incomplete(filePath, "size-limit");
+        return;
+      }
+    } catch (_error) {
+      incomplete(filePath, "stat-error");
       return;
     }
     const contents = readFileBytes(filePath);
-    if (contents === null) return;
+    if (contents === null) {
+      incomplete(filePath, "read-error");
+      return;
+    }
+    filesScanned += 1;
     inspectFile(filePath, root, contents.toString("utf8"), findings, claudeWatch, contents);
-  });
+  }, incomplete);
   emitClaudeWatchFindings(findings, claudeWatch);
 
   return {
@@ -247,6 +265,7 @@ function scanTarget(targetPath) {
     scannedAt: new Date().toISOString(),
     target: root,
     summary: summarize(filesScanned, findings),
+    coverage,
     findings,
   };
 }
@@ -929,18 +948,14 @@ function versionFromExtensionPath(normalizedRelative, extensionId) {
   return parts[idIndex + 1] || "";
 }
 
-function walk(root, onFile) {
-  let stat;
-  try {
-    stat = fs.statSync(root);
-  } catch (_error) {
-    return;
-  }
+function walk(root, onFile, incomplete) {
+  const stat = fs.statSync(root);
 
   if (stat.isFile()) {
     onFile(root);
     return;
   }
+  if (!stat.isDirectory()) throw new Error("Target must be a regular file or directory");
 
   const stack = [root];
   while (stack.length > 0) {
@@ -949,6 +964,7 @@ function walk(root, onFile) {
     try {
       entries = fs.readdirSync(current, { withFileTypes: true });
     } catch (_error) {
+      incomplete(current, "list-error");
       continue;
     }
     for (const entry of entries) {
@@ -963,12 +979,7 @@ function walk(root, onFile) {
 }
 
 function shouldReadFile(filePath) {
-  if (!TEXT_EXTENSIONS.has(path.extname(filePath).toLowerCase())) return false;
-  try {
-    return fs.statSync(filePath).size <= MAX_FILE_BYTES;
-  } catch (_error) {
-    return false;
-  }
+  return TEXT_EXTENSIONS.has(path.extname(filePath).toLowerCase());
 }
 
 function readFileBytes(filePath) {
