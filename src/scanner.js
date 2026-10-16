@@ -261,7 +261,7 @@ function scanTarget(targetPath) {
 
   return {
     tool: "browser-exposure-guard",
-    version: "0.1.4",
+    version: "0.1.5",
     scannedAt: new Date().toISOString(),
     target: root,
     summary: summarize(filesScanned, findings),
