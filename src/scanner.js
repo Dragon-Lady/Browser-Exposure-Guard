@@ -191,13 +191,9 @@ const FAKE_CLAUDE_EXTENSION_NAMES = new Set([
 ]);
 
 const CLAUDE_PRIVILEGED_MODE_PATTERNS = [
-  { label: "skip_all_permission_checks", pattern: /skip_all_permission_checks/i },
-  { label: "skipPermissions=true", pattern: /skipPermissions\s*=\s*["']?true/i },
-  { label: "skipPermissions true", pattern: /["']skipPermissions["']\s*:\s*["']true["']/i },
-  { label: "Act without asking", pattern: /Act without asking/i },
-  { label: "Skip all approvals", pattern: /Skip all approvals/i },
-  { label: "CLAUDE_CHROME_PERMISSION_MODE", pattern: /CLAUDE_CHROME_PERMISSION_MODE\s*=\s*skip_all_permission_checks/i },
-  { label: "lastPermissionModePreference skip", pattern: /lastPermissionModePreference["']?\s*[:=]\s*["']?skip_all_permission_checks/i },
+  { label: "skip_all_permission_checks enabled", pattern: /\bskip_all_permission_checks["']?\s*[:=]\s*["']?true\b/i },
+  { label: "skipPermissions enabled", pattern: /\bskipPermissions["']?\s*[:=]\s*["']?true\b/i },
+  { label: "permission mode skips approvals", pattern: /\b(?:CLAUDE_CHROME_PERMISSION_MODE|lastPermissionModePreference|permissionMode|permission_mode)["']?(?:\s*[:=]\s*|\s+)["']?skip_all_permission_checks\b/i },
 ];
 
 const FAKE_CLAUDE_LURE_MARKERS = [
@@ -478,7 +474,15 @@ function scanOfficialClaudeForChrome(relative, text, claudeWatch) {
 function scanClaudePrivilegedModeSettings(relative, text, claudeWatch) {
   if (!isClaudePrivilegedModeSettingsFile(relative)) return;
 
-  const matched = CLAUDE_PRIVILEGED_MODE_PATTERNS.filter((entry) => entry.pattern.test(text)).map((entry) => entry.label);
+  let settings = parsedManifest(text);
+  if (isChromiumPreferencesFile(relative)) {
+    // Shared preferences contain other extensions and unrelated UI strings.
+    settings = settings?.extensions?.settings?.[OFFICIAL_CLAUDE_CHROME_EXTENSION_ID];
+    if (!settings || typeof settings !== "object") return;
+  }
+  const matched = settings
+    ? claudePrivilegedSettingMarkers(settings)
+    : CLAUDE_PRIVILEGED_MODE_PATTERNS.filter((entry) => entry.pattern.test(text)).map((entry) => entry.label);
   if (matched.length === 0) return;
 
   claudeWatch.privileged.push({
@@ -487,6 +491,25 @@ function scanClaudePrivilegedModeSettings(relative, text, claudeWatch) {
     profileKey: chromiumProfileKey(relative),
     extensionId: OFFICIAL_CLAUDE_CHROME_EXTENSION_ID,
   });
+}
+
+function claudePrivilegedSettingMarkers(settings) {
+  const matched = new Set();
+  const pending = [settings];
+  while (pending.length) {
+    for (const [key, value] of Object.entries(pending.pop())) {
+      if (value && typeof value === "object") {
+        pending.push(value);
+      } else if (/^(skip_all_permission_checks|skipPermissions)$/i.test(key)
+          && (value === true || value === "true")) {
+        matched.add(`${key} enabled`);
+      } else if (/^(CLAUDE_CHROME_PERMISSION_MODE|lastPermissionModePreference|permissionMode|permission_mode)$/i.test(key)
+          && value === "skip_all_permission_checks") {
+        matched.add("permission mode skips approvals");
+      }
+    }
+  }
+  return [...matched];
 }
 
 function emitClaudeWatchFindings(findings, claudeWatch) {
@@ -713,11 +736,19 @@ function officialClaudeManifestIdentity(text) {
   const officialName = name === "claude" || name === "claude in chrome";
   if (!officialName) return "";
 
-  const author = String(manifest.author || "").toLowerCase();
+  const author = String(manifest.author || "").trim().toLowerCase();
   const homepage = String(manifest.homepage_url || manifest.homepage || "").toLowerCase();
-  const officialPublisher = author.includes("anthropic")
-    || homepage.includes("anthropic.com")
-    || homepage.includes("claude.ai");
+  let officialPublisher = author === "anthropic" || author === "anthropic pbc";
+  if (homepage) {
+    try {
+      const url = new URL(homepage);
+      const host = url.hostname.replace(/\.$/, "");
+      officialPublisher = ["http:", "https:"].includes(url.protocol)
+        && ["anthropic.com", "claude.ai"].some((domain) => host === domain || host.endsWith(`.${domain}`));
+    } catch (_error) {
+      officialPublisher = false;
+    }
+  }
   if (!officialPublisher) return "";
 
   return `manifest name ${manifest.name}; publisher ${manifest.author || manifest.homepage_url || "Anthropic"}`;
