@@ -100,6 +100,11 @@ while it is enabled, a published fake-Claude impersonation extension is
 installed, or a local file matches a published install lure. Follow the
 finding’s guidance links. This tool does not claim the host is clean.
 
+Extension-storage findings are stored evidence, not proof of the current live
+setting. Log fragments are reassembled, but this scanner does not validate
+LevelDB checksums or reconstruct the complete database state, including
+compacted or compressed table files. Confirm the current setting in the browser.
+
 Medium findings are advisory or posture reminders. They usually mean “check
 browser patch state” or “avoid enabling experimental browser flags around
 untrusted repros.” A Medium Claude finding means the official extension is

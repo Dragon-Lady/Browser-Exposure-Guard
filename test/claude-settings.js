@@ -79,20 +79,36 @@ for (const enabled of [
   assert(scanFile(storagePath, enabled).some((f) => f.id === privilegedId));
 }
 
-function leveldbPut(key, value) {
-  const keyBytes = Buffer.from(key);
-  const valueBytes = Buffer.from(JSON.stringify(value));
+function varint(value) {
+  const bytes = [];
+  do {
+    bytes.push((value & 127) | (value > 127 ? 128 : 0));
+    value >>>= 7;
+  } while (value);
+  return Buffer.from(bytes);
+}
+
+function writeBatch(entries) {
   const batchHeader = Buffer.alloc(12);
-  batchHeader.writeUInt32LE(1, 8);
-  const batch = Buffer.concat([
-    batchHeader, Buffer.from([1, keyBytes.length]), keyBytes,
-    Buffer.from([valueBytes.length]), valueBytes,
-  ]);
+  batchHeader.writeUInt32LE(entries.length, 8);
+  return Buffer.concat([batchHeader, ...entries.flatMap(([key, value]) => {
+    const keyBytes = Buffer.from(key);
+    const valueBytes = Buffer.from(JSON.stringify(value));
+    return [Buffer.from([1]), varint(keyBytes.length), keyBytes,
+      varint(valueBytes.length), valueBytes];
+  })]);
+}
+
+function logRecord(payload, type) {
   const logHeader = Buffer.alloc(7);
-  logHeader.writeUInt16LE(batch.length, 4);
-  logHeader[6] = 1;
+  logHeader.writeUInt16LE(payload.length, 4);
+  logHeader[6] = type;
   // This scanner inspects markers, not database integrity or CRC values.
-  return Buffer.concat([logHeader, batch]);
+  return Buffer.concat([logHeader, payload]);
+}
+
+function leveldbPut(key, value) {
+  return logRecord(writeBatch([[key, value]]), 1);
 }
 
 for (const [key, value] of [
@@ -113,4 +129,29 @@ for (const [key, value] of [
   assert(!scanFile(storagePath, leveldbPut(key, value)).some((f) => f.id === privilegedId));
 }
 
-console.log("39 publisher and permission-setting regression cases passed");
+function fragmentedLog(batch, firstLength) {
+  // Fill the first block so the selected key/value byte falls at its edge.
+  const parts = [logRecord(Buffer.alloc(32768 - firstLength - 14), 1),
+    logRecord(batch.subarray(0, firstLength), 2)];
+  for (let offset = firstLength; offset < batch.length; offset += 32761) {
+    const end = Math.min(offset + 32761, batch.length);
+    parts.push(logRecord(batch.subarray(offset, end), end === batch.length ? 4 : 3));
+  }
+  return Buffer.concat(parts);
+}
+
+const enabledBatch = writeBatch([["lastPermissionModePreference", "skip_all_permission_checks"]]);
+for (const split of [15, 40, 42, enabledBatch.length - 2]) {
+  assert(scanFile(storagePath, fragmentedLog(enabledBatch, split)).some((f) => f.id === privilegedId));
+}
+const largeBatch = writeBatch([["skipPermissions", true], ["padding", "x".repeat(70000)]]);
+assert(scanFile(storagePath, fragmentedLog(largeBatch, 17)).some((f) => f.id === privilegedId));
+assert(!scanFile(storagePath, fragmentedLog(writeBatch([["skipPermissions", false]]), 17))
+  .some((f) => f.id === privilegedId));
+for (const type of [2, 3, 4]) {
+  assert(!scanFile(storagePath, logRecord(enabledBatch, type)).some((f) => f.id === privilegedId));
+}
+const truncated = fragmentedLog(enabledBatch, 17).subarray(0, -3);
+assert(!scanFile(storagePath, truncated).some((f) => f.id === privilegedId));
+
+console.log("49 publisher and permission-setting regression cases passed");

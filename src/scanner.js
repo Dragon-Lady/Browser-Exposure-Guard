@@ -235,9 +235,9 @@ function scanTarget(targetPath) {
       scanClickfixBinary(filePath, relative, findings);
       return;
     }
-    const text = readTextFile(filePath);
-    if (text === null) return;
-    inspectFile(filePath, root, text, findings, claudeWatch);
+    const contents = readFileBytes(filePath);
+    if (contents === null) return;
+    inspectFile(filePath, root, contents.toString("utf8"), findings, claudeWatch, contents);
   });
   emitClaudeWatchFindings(findings, claudeWatch);
 
@@ -251,7 +251,7 @@ function scanTarget(targetPath) {
   };
 }
 
-function inspectFile(filePath, root, text, findings, claudeWatch) {
+function inspectFile(filePath, root, text, findings, claudeWatch, contents) {
   const relative = path.relative(root, filePath).replace(/\\/g, "/") || path.basename(filePath);
   const extension = browserArtifactExtension(filePath);
 
@@ -262,7 +262,7 @@ function inspectFile(filePath, root, text, findings, claudeWatch) {
   scanChromiumAdvisoryNotes(relative, text, findings);
   scanKnownAiExtensionManifest(relative, text, findings);
   scanOfficialClaudeForChrome(relative, text, claudeWatch);
-  scanClaudePrivilegedModeSettings(relative, text, claudeWatch);
+  scanClaudePrivilegedModeSettings(relative, text, claudeWatch, contents);
   scanFakeClaudeImpersonationExtension(relative, text, findings);
   scanFakeClaudeLureArtifact(relative, text, findings);
   scanCopilotRepromptLinks(relative, text, findings);
@@ -471,7 +471,7 @@ function scanOfficialClaudeForChrome(relative, text, claudeWatch) {
   claudeWatch.presence.push({ relative, matched, version, profileKey, extensionId });
 }
 
-function scanClaudePrivilegedModeSettings(relative, text, claudeWatch) {
+function scanClaudePrivilegedModeSettings(relative, text, claudeWatch, contents) {
   if (!isClaudePrivilegedModeSettingsFile(relative)) return;
 
   let settings = parsedManifest(text);
@@ -484,7 +484,7 @@ function scanClaudePrivilegedModeSettings(relative, text, claudeWatch) {
     ? claudePrivilegedSettingMarkers(settings)
     : [...new Set([
       ...CLAUDE_PRIVILEGED_MODE_PATTERNS.filter((entry) => entry.pattern.test(text)).map((entry) => entry.label),
-      ...claudeFramedSettingMarkers(text),
+      ...claudeFramedSettingMarkers(contents),
     ])];
   if (matched.length === 0) return;
 
@@ -496,11 +496,12 @@ function scanClaudePrivilegedModeSettings(relative, text, claudeWatch) {
   });
 }
 
-function claudeFramedSettingMarkers(text) {
+function claudeFramedSettingMarkers(contents) {
   // LevelDB WriteBatch Put: tag 1, length-prefixed key, length-prefixed value.
   // Known keys and JSON values are ASCII and shorter than 128 bytes, so each
-  // length is a one-byte varint preserved by UTF-8 decoding. Match complete
+  // length is a one-byte varint. Match complete
   // pairs, never a bare mode label or an arbitrary gap between key and value.
+  const records = leveldbLogRecords(contents).map((record) => record.toString("latin1"));
   const pairs = [
     ...["skipPermissions", "skip_all_permission_checks"].flatMap((key) =>
       [true, "true"].map((value) => [key, value])),
@@ -511,8 +512,49 @@ function claudeFramedSettingMarkers(text) {
     const serialized = JSON.stringify(value);
     const framed = String.fromCharCode(1, key.length) + key
       + String.fromCharCode(serialized.length) + serialized;
-    return text.includes(framed);
+    return records.some((record) => record.includes(framed));
   }).map(([key]) => `${key} enabled storage record`);
+}
+
+function leveldbLogRecords(contents) {
+  // Physical records cannot cross 32 KiB blocks; logical records can. Rejoin
+  // FIRST/MIDDLE/LAST payloads without opening or mutating the database.
+  const blockSize = 32768;
+  const records = [];
+  let fragments = null;
+  let offset = 0;
+  while (offset + 7 <= contents.length) {
+    const blockRemaining = blockSize - (offset % blockSize);
+    if (blockRemaining < 7) {
+      offset += blockRemaining;
+      continue;
+    }
+    const length = contents.readUInt16LE(offset + 4);
+    const type = contents[offset + 6];
+    const end = offset + 7 + length;
+    if ((length === 0 && type === 0) || length + 7 > blockRemaining || end > contents.length) {
+      fragments = null;
+      offset += blockRemaining;
+      continue;
+    }
+    const payload = contents.subarray(offset + 7, end);
+    offset = end;
+    if (type === 1) {
+      fragments = null;
+      records.push(payload);
+    } else if (type === 2) {
+      fragments = [payload];
+    } else if ((type === 3 || type === 4) && fragments) {
+      fragments.push(payload);
+      if (type === 4) {
+        records.push(Buffer.concat(fragments));
+        fragments = null;
+      }
+    } else {
+      fragments = null;
+    }
+  }
+  return records;
 }
 
 function claudePrivilegedSettingMarkers(settings) {
@@ -929,9 +971,9 @@ function shouldReadFile(filePath) {
   }
 }
 
-function readTextFile(filePath) {
+function readFileBytes(filePath) {
   try {
-    return fs.readFileSync(filePath, "utf8");
+    return fs.readFileSync(filePath);
   } catch (_error) {
     return null;
   }
