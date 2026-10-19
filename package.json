@@ -13,7 +13,7 @@
     "README.md"
   ],
   "scripts": {
-    "test": "node --check bin/browser-exposure-guard.js && node --check src/scanner.js && node --check src/clickfix.js && node test/smoke.js && node test/clickfix.js && node test/claude-settings.js && node --test test/functional-boundaries.js"
+    "test": "node --check bin/browser-exposure-guard.js && node --check src/scanner.js && node --check src/clickfix.js && node test/smoke.js && node test/clickfix.js && node test/claude-settings.js && node --test test/functional-boundaries.js && node --check src/adfection.js && node --test test/adfection.js"
   },
   "keywords": [
     "browser",

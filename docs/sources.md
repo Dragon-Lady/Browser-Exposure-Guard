@@ -183,3 +183,8 @@ as `claude.exe` are not used as standalone alerts.
 
 Sources are retained for defensive patch posture and local artifact review.
 This project intentionally avoids exploit reproduction steps.
+
+- Citizen Lab, AdFection / Controlium investigation, eight published NOAS routes
+  verified 2026-10-19: https://citizenlab.ca/research/how-discover-tech-turned-targeted-ads-into-a-pipeline-for-spyware/
+  Associated ad infrastructure is a correlation lead, not a confirmed payload
+  destination in every visit.

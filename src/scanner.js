@@ -1,6 +1,7 @@
 "use strict";
 
 const fs = require("fs");
+const adfection = require("./adfection");
 const path = require("path");
 const { scanClickfixArtifact, scanClickfixBinary, isClickfixCandidateBinary } = require("./clickfix");
 
@@ -286,6 +287,7 @@ function inspectFile(filePath, root, text, findings, claudeWatch, contents) {
   scanFakeClaudeLureArtifact(relative, text, findings);
   scanCopilotRepromptLinks(relative, text, findings);
   scanClickfixArtifact(relative, text, findings);
+  findings.push(...adfection.inspectArtifact(relative, text));
 }
 
 function createClaudeWatch() {

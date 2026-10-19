@@ -131,3 +131,12 @@ isTrusted-style fix. Same credited writeups as the High finding.
 ## Sources
 
 See [docs/sources.md](docs/sources.md).
+
+## Unreleased AdFection artifact review
+
+Saved URLs matching eight exact Controlium ad routes documented by Citizen Lab
+produce medium-severity investigation leads. Host and path must both match;
+lookalike hosts and unrelated paths do not. Evidence contains only the route,
+never query parameters. These are associated infrastructure references, not
+proof of spyware delivery or infection. This tool does not intercept live ads
+or prevent zero-click browser exploitation.
