@@ -20,3 +20,16 @@ test('real saved HAR scan emits review without query contents',t=>{
  const report=scanTarget(root),hit=report.findings.find(f=>f.id==='adfection-saved-route-review');
  assert(hit);assert(!JSON.stringify(hit).includes('PRIVATE-CANARY'));
 });
+
+test('JSON Unicode slash escapes and DNS trailing dot retain exact route scope',()=>{
+ for(const suffix of ['?id=PRIVATE-CANARY','#PRIVATE-CANARY','']) {
+  const url='https://noas.mtrtb.com./getAd'+suffix;
+  for(const text of [url,url.replace(/\//g,'\\u002f'),url.replace(/\//g,'\\u002F')]) {
+   const hits=inspectArtifact('saved.har',text);
+   assert.equal(hits.length,1);assert.equal(hits[0].evidence,'noas.mtrtb.com/getAd');
+   assert(!JSON.stringify(hits).includes('PRIVATE-CANARY'));
+  }
+ }
+ for(const url of ['https://noas.mtrtb.com/getAd/','https://noas.mtrtb.com/GETAD','https://noas.mtrtb.com../getAd','https://noas.mtrtb.com.example.invalid/getAd'])
+  assert.deepEqual(inspectArtifact('saved.har',url.replace(/\//g,'\\u002f')),[]);
+});
