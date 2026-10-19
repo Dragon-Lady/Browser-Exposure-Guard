@@ -12,11 +12,12 @@ function inspectArtifact(file, text) {
  const findings=[], seen=new Set();
  // Normalize JSON's escaped slashes. Do not decode entire encoded URLs, which
  // could turn an unrelated site's query value into a claimed destination.
- for(const match of text.replace(/\\\//g,"/").matchAll(/https?:\/\/[^\s"'<>`\\]+/g)) {
+ for(const match of text.replace(/\\(?:\/|u002f)/gi,"/").matchAll(/https?:\/\/[^\s"'<>`\\]+/g)) {
   let url; try {url=new URL(match[0]);} catch {continue;}
-  const expected=ROUTES.get(url.hostname.toLowerCase());
+  const host=url.hostname.toLowerCase().replace(/\.$/, "");
+  const expected=ROUTES.get(host);
   if(!expected || url.pathname!==expected || url.username || url.password) continue;
-  const indicator=url.hostname.toLowerCase()+url.pathname;
+  const indicator=host+url.pathname;
   if(seen.has(indicator)) continue; seen.add(indicator);
   findings.push({severity:"medium",id:"adfection-saved-route-review",path:file,
    reason:"Saved text references a Controlium ad route documented by Citizen Lab. This is an investigation lead, not evidence of spyware delivery or infection.",

@@ -140,3 +140,8 @@ lookalike hosts and unrelated paths do not. Evidence contains only the route,
 never query parameters. These are associated infrastructure references, not
 proof of spyware delivery or infection. This tool does not intercept live ads
 or prevent zero-click browser exploitation.
+
+Saved AdFection URL matching accepts JSON slash escapes and DNS trailing-dot
+hostnames. Paths remain exact and case-sensitive: a different path case or an
+extra trailing slash is not assumed to be the same reported endpoint. Queries
+and fragments remain absent from findings.
