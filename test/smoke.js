@@ -275,6 +275,8 @@ try {
   );
 
   const report = scanTarget(root);
+  assert.strictEqual(report.version, "0.1.6");
+  assert.strictEqual(report.version, require("../package.json").version);
   const ids = new Set(report.findings.map((finding) => finding.id));
   const findingsById = (id) => report.findings.filter((finding) => finding.id === id);
   assert(ids.has("chromium-advisory-watch-note"));

@@ -262,7 +262,7 @@ function scanTarget(targetPath) {
 
   return {
     tool: "browser-exposure-guard",
-    version: "0.1.5",
+    version: require("../package.json").version,
     scannedAt: new Date().toISOString(),
     target: root,
     summary: summarize(filesScanned, findings),
